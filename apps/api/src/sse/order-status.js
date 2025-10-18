@@ -4,44 +4,18 @@ const { getDB } = require('../db');
 // Track active SSE connections
 const activeConnections = new Map();
 
-// Order status progression with timing
-const STATUS_PROGRESSION = [
-  { status: 'PENDING', duration: 3000 },     // 3 seconds
-  { status: 'PROCESSING', duration: 5000 },  // 5 seconds
-  { status: 'SHIPPED', duration: 5000 },     // 5 seconds
-  { status: 'DELIVERED', duration: 0 }       // Terminal state
-];
+// Order status progression with timing for auto-simulation
+const statusProgression = {
+  'PENDING': { next: 'PROCESSING', delay: 3000 },     // 3 seconds
+  'PROCESSING': { next: 'SHIPPED', delay: 5000 },      // 5 seconds  
+  'SHIPPED': { next: 'DELIVERED', delay: 5000 },       // 5 seconds
+  'DELIVERED': { next: null, delay: 0 }
+};
 
-// SSE helper to send events
-function sendSSE(res, data) {
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-// Update order status in database
-async function updateOrderStatus(orderId, newStatus) {
-  const db = getDB();
-  
-  const result = await db.collection('orders').findOneAndUpdate(
-    { _id: new ObjectId(orderId) },
-    {
-      $set: {
-        status: newStatus,
-        updatedAt: new Date()
-      },
-      $push: {
-        statusHistory: {
-          status: newStatus,
-          timestamp: new Date()
-        }
-      }
-    },
-    { returnDocument: 'after' }
-  );
-  
-  return result;
-}
-
-// Main SSE endpoint handler
+/**
+ * Stream order status updates via SSE with automatic progression
+ * Auto-simulates order fulfillment for testing purposes
+ */
 async function streamOrderStatus(req, res) {
   const { id } = req.params;
   
@@ -55,167 +29,171 @@ async function streamOrderStatus(req, res) {
     });
   }
   
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'X-Accel-Buffering': 'no' // Disable Nginx buffering
+  });
+  
+  // Keep connection alive
+  const keepAlive = setInterval(() => {
+    res.write(':heartbeat\n\n');
+  }, 30000);
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connected', message: 'SSE connection established' })}\n\n`);
+  
   try {
     const db = getDB();
-    
-    // Fetch the order
-    const order = await db.collection('orders').findOne({
-      _id: new ObjectId(id)
-    });
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(id) });
     
     if (!order) {
-      return res.status(404).json({
-        error: {
-          code: 'ORDER_NOT_FOUND',
-          message: 'Order not found'
-        }
-      });
-    }
-    
-    // Set SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
-    });
-    
-    // Send initial status immediately
-    sendSSE(res, {
-      type: 'status',
-      orderId: id,
-      status: order.status,
-      carrier: order.carrier,
-      estimatedDelivery: order.estimatedDelivery,
-      timestamp: new Date()
-    });
-    
-    // If order is already delivered, close connection
-    if (order.status === 'DELIVERED') {
-      sendSSE(res, {
-        type: 'complete',
-        message: 'Order has been delivered'
-      });
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Order not found' })}\n\n`);
+      clearInterval(keepAlive);
       res.end();
       return;
     }
     
-    // Track this connection
+    // Send current order status immediately
+    res.write(`data: ${JSON.stringify({
+      type: 'status_update',
+      orderId: id,
+      status: order.status,
+      carrier: order.carrier || 'Standard Shipping',
+      estimatedDelivery: order.estimatedDelivery,
+      timestamp: new Date().toISOString()
+    })}\n\n`);
+    
+    // Store connection
     const connectionId = `${id}-${Date.now()}`;
-    activeConnections.set(connectionId, { orderId: id, res });
+    activeConnections.set(connectionId, { res, orderId: id, keepAlive });
     
-    // Find current status index
-    let currentStatusIndex = STATUS_PROGRESSION.findIndex(
-      s => s.status === order.status
-    );
-    
-    if (currentStatusIndex === -1) {
-      currentStatusIndex = 0;
-    }
-    
-    // Function to progress to next status
-    const progressStatus = async () => {
-      currentStatusIndex++;
+    // Auto-progress order status for testing
+    const progressOrder = async (currentStatus) => {
+      const progression = statusProgression[currentStatus];
       
-      if (currentStatusIndex >= STATUS_PROGRESSION.length) {
-        // Should not happen, but handle gracefully
-        res.end();
+      if (!progression || !progression.next) {
+        // Order is delivered or in final state
+        res.write(`data: ${JSON.stringify({
+          type: 'completed',
+          message: 'Order has been delivered',
+          finalStatus: currentStatus
+        })}\n\n`);
+        clearInterval(keepAlive);
         activeConnections.delete(connectionId);
+        res.end();
         return;
       }
       
-      const nextStatus = STATUS_PROGRESSION[currentStatusIndex];
-      
-      try {
-        // Update database
-        const updatedOrder = await updateOrderStatus(id, nextStatus.status);
-        
-        if (updatedOrder) {
-          // Send SSE event
-          sendSSE(res, {
-            type: 'status',
-            orderId: id,
-            status: nextStatus.status,
-            carrier: updatedOrder.carrier,
-            estimatedDelivery: updatedOrder.estimatedDelivery,
-            timestamp: new Date()
-          });
-          
-          console.log(`Order ${id} progressed to ${nextStatus.status}`);
-          
-          // If delivered, close connection
-          if (nextStatus.status === 'DELIVERED') {
-            sendSSE(res, {
-              type: 'complete',
-              message: 'Order has been delivered'
-            });
-            res.end();
-            activeConnections.delete(connectionId);
-            clearInterval(progressInterval);
+      // Wait for the specified delay
+      setTimeout(async () => {
+        try {
+          // Check if connection is still active
+          if (!activeConnections.has(connectionId)) {
             return;
           }
+          
+          // Update order status in database
+          const updateResult = await db.collection('orders').updateOne(
+            { _id: new ObjectId(id) },
+            {
+              $set: {
+                status: progression.next,
+                updatedAt: new Date()
+              },
+              $push: {
+                statusHistory: {
+                  status: progression.next,
+                  timestamp: new Date()
+                }
+              }
+            }
+          );
+          
+          if (updateResult.modifiedCount > 0) {
+            // Get updated order for carrier info
+            const updatedOrder = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+            
+            // Send status update to client
+            const statusUpdate = {
+              type: 'status_update',
+              orderId: id,
+              status: progression.next,
+              previousStatus: currentStatus,
+              carrier: updatedOrder.carrier || 'Standard Shipping',
+              estimatedDelivery: updatedOrder.estimatedDelivery,
+              timestamp: new Date().toISOString()
+            };
+            
+            res.write(`data: ${JSON.stringify(statusUpdate)}\n\n`);
+            
+            // Continue progression
+            progressOrder(progression.next);
+          } else {
+            // Failed to update, close connection
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to update order' })}\n\n`);
+            clearInterval(keepAlive);
+            activeConnections.delete(connectionId);
+            res.end();
+          }
+        } catch (error) {
+          console.error('SSE update error:', error);
+          res.write(`data: ${JSON.stringify({ type: 'error', message: 'Update failed' })}\n\n`);
+          clearInterval(keepAlive);
+          activeConnections.delete(connectionId);
+          res.end();
         }
-      } catch (error) {
-        console.error('Error updating order status:', error);
-        sendSSE(res, {
-          type: 'error',
-          message: 'Failed to update order status'
-        });
-      }
+      }, progression.delay);
     };
     
-    // Set up auto-progression interval
-    const progressInterval = setInterval(() => {
-      const currentStatus = STATUS_PROGRESSION[currentStatusIndex];
-      if (currentStatus && currentStatus.duration > 0) {
-        progressStatus();
-      }
-    }, STATUS_PROGRESSION[currentStatusIndex].duration || 5000);
-    
-    // Send heartbeat every 30 seconds to keep connection alive
-    const heartbeatInterval = setInterval(() => {
-      try {
-        res.write(':heartbeat\n\n');
-      } catch (error) {
-        // Connection closed, clean up
-        clearInterval(heartbeatInterval);
-        clearInterval(progressInterval);
+    // Start auto-progression if order is not delivered
+    if (order.status !== 'DELIVERED') {
+      progressOrder(order.status);
+    } else {
+      // Order already delivered, close connection
+      res.write(`data: ${JSON.stringify({
+        type: 'completed',
+        message: 'Order has been delivered',
+        finalStatus: 'DELIVERED'
+      })}\n\n`);
+      setTimeout(() => {
+        clearInterval(keepAlive);
         activeConnections.delete(connectionId);
-      }
-    }, 30000);
+        res.end();
+      }, 1000);
+    }
     
-    // Handle client disconnect
+    // Clean up on client disconnect
     req.on('close', () => {
-      console.log(`SSE connection closed for order ${id}`);
-      clearInterval(progressInterval);
-      clearInterval(heartbeatInterval);
+      clearInterval(keepAlive);
       activeConnections.delete(connectionId);
-      res.end();
+      console.log(`SSE connection closed for order ${id}`);
     });
     
   } catch (error) {
-    console.error('SSE stream error:', error);
-    res.status(500).json({
-      error: {
-        code: 'STREAM_ERROR',
-        message: 'Failed to establish SSE stream'
-      }
-    });
+    console.error('SSE error:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Server error' })}\n\n`);
+    clearInterval(keepAlive);
+    res.end();
   }
 }
 
-// Get count of active connections
+// Get active SSE connections count
 function getActiveConnections() {
   return activeConnections.size;
 }
 
-// Close all connections (for graceful shutdown)
+// Close all active connections (for cleanup)
 function closeAllConnections() {
-  activeConnections.forEach((connection) => {
-    try {
-      connection.res.end();
-    } catch (error) {
-      console.error('Error closing connection:', error);
+  activeConnections.forEach((conn) => {
+    if (conn.keepAlive) {
+      clearInterval(conn.keepAlive);
+    }
+    if (conn.res && !conn.res.writableEnded) {
+      conn.res.end();
     }
   });
   activeConnections.clear();

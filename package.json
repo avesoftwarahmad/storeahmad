@@ -14,8 +14,11 @@
     "seed": "cd apps/api && npm run seed",
     "test": "cd tests && npm test",
     "build": "cd apps/storefront && npm run build",
+    "build:api": "cd apps/api && npm ci --only=production",
+    "build:frontend": "cd apps/storefront && npm ci && npm run build",
     "check-deploy": "node check-deploy-ready.js",
-    "prepare-deploy": "npm run check-deploy && echo '\n✅ Project is ready! Push to GitHub and follow DEPLOYMENT_GUIDE.md'"
+    "prepare-deploy": "npm run check-deploy && echo '\n✅ Project is ready! Push to GitHub and follow DEPLOYMENT_GUIDE.md'",
+    "predeploy": "npm run check-deploy"
   },
   "workspaces": [
     "apps/api",

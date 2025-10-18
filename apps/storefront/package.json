@@ -33,7 +33,7 @@
     "storybook": "^9.1.10",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.4.5",
-    "vite": "^7.1.10",
+    "vite": "^5.0.0",
     "vitest": "^0.34.1"
   }
 }

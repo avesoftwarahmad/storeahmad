@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { connectDB } = require('./db');
+const { globalErrorHandler, notFoundHandler } = require('./middleware/error-handler');
 
 // Load environment variables
 dotenv.config();
@@ -85,27 +86,11 @@ app.get('/api/performance', (req, res) => {
   });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: {
-      code: err.code || 'INTERNAL_ERROR',
-      message: err.message || 'An internal server error occurred',
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    }
-  });
-});
-
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    error: {
-      code: 'NOT_FOUND',
-      message: 'The requested resource was not found'
-    }
-  });
-});
+app.use(notFoundHandler);
+
+// Global error handling middleware
+app.use(globalErrorHandler);
 
 // Start server
 async function startServer() {

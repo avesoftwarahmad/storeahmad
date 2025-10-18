@@ -17,7 +17,10 @@ async function connectDB() {
     });
     
     await client.connect();
-    db = client.db();
+    
+    // Extract database name from URI or use default
+    const dbName = process.env.MONGODB_DB_NAME || 'shopmart';
+    db = client.db(dbName);
     
     // Verify connection with a ping
     await db.admin().ping();
