@@ -1,10 +1,10 @@
 import type { Product, OrderStatus } from '../types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin
 
 export async function listProducts(): Promise<Product[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/products`)
+    const response = await fetch(`${API_BASE_URL}/api/products?limit=100`)
     if (!response.ok) throw new Error('Failed to fetch products')
     const data = await response.json()
     const products = data.products || data
@@ -15,7 +15,7 @@ export async function listProducts(): Promise<Product[]> {
       title: p.name || p.title,
       price: p.price,
       image: p.image || p.imageUrl || '/placeholder.jpg',
-      tags: p.tags || (p.category ? [p.category] : []),
+      tags: (Array.isArray(p.tags) && p.tags.length > 0) ? p.tags : (p.category ? [p.category] : []),
       stockQty: p.stock || p.stockQty || 0,
       description: p.description
     }))
@@ -29,7 +29,7 @@ export async function listProducts(): Promise<Product[]> {
 
 export async function getProduct(id: string): Promise<Product | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/products/${id}`)
+    const response = await fetch(`${API_BASE_URL}/api/products/${id}`)
     if (!response.ok) return null
     const p = await response.json()
     
@@ -39,7 +39,7 @@ export async function getProduct(id: string): Promise<Product | null> {
       title: p.name || p.title,
       price: p.price,
       image: p.image || p.imageUrl || '/placeholder.jpg',
-      tags: p.tags || (p.category ? [p.category] : []),
+      tags: (Array.isArray(p.tags) && p.tags.length > 0) ? p.tags : (p.category ? [p.category] : []),
       stockQty: p.stock || p.stockQty || 0,
       description: p.description
     }
@@ -51,7 +51,7 @@ export async function getProduct(id: string): Promise<Product | null> {
 
 export async function placeOrder(orderData: any) {
   try {
-    const response = await fetch(`${API_BASE_URL}/orders`, {
+    const response = await fetch(`${API_BASE_URL}/api/orders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -73,7 +73,7 @@ export async function placeOrder(orderData: any) {
 
 export async function getOrderStatus(id: string): Promise<OrderStatus | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/orders/${id}`)
+    const response = await fetch(`${API_BASE_URL}/api/orders/${id}`)
     if (!response.ok) return null
     const order = await response.json()
     return {
@@ -93,7 +93,7 @@ export const api = {
   // Lookup customer by email
   lookupCustomer: async (email: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/customers?email=${encodeURIComponent(email)}`)
+      const response = await fetch(`${API_BASE_URL}/api/customers?email=${encodeURIComponent(email)}`)
       if (!response.ok) {
         throw new Error('Customer not found')
       }
@@ -107,7 +107,7 @@ export const api = {
   // Get customer orders
   getCustomerOrders: async (customerId: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/orders?customerId=${customerId}`)
+      const response = await fetch(`${API_BASE_URL}/api/orders?customerId=${customerId}`)
       if (!response.ok) throw new Error('Failed to fetch orders')
       return await response.json()
     } catch (error) {
@@ -119,7 +119,7 @@ export const api = {
   // Analytics endpoints
   getDashboardMetrics: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/dashboard/business-metrics`)
+      const response = await fetch(`${API_BASE_URL}/api/dashboard/business-metrics`)
       if (!response.ok) throw new Error('Failed to fetch metrics')
       return await response.json()
     } catch (error) {

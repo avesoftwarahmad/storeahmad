@@ -19,7 +19,7 @@ export class SSEClient {
   private reconnectDelay = 3000 // 3 seconds
 
   constructor(
-    private baseUrl: string = import.meta.env.VITE_API_URL || '/api'
+    private baseUrl: string = import.meta.env.VITE_API_URL || window.location.origin
   ) {}
 
   connect(
@@ -32,7 +32,7 @@ export class SSEClient {
       this.disconnect()
     }
 
-    const url = `${this.baseUrl}/orders/${orderId}/stream`
+    const url = `${this.baseUrl}/api/orders/${orderId}/stream`
     console.log(`Connecting to SSE stream: ${url}`)
 
     try {

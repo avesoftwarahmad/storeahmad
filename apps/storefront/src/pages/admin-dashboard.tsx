@@ -26,22 +26,28 @@ export default function AdminDashboard() {
       setLoading(true)
       
       // Load multiple endpoints in parallel
-      const [dashboardMetrics, _, performance, assistantStats] = await Promise.all([
+      const [analytics, performance, assistantStats] = await Promise.all([
         apiClient.get('/api/analytics/dashboard-metrics'),
-        apiClient.get('/api/dashboard/business-metrics'),
         apiClient.get('/api/dashboard/performance'),
         apiClient.get('/api/dashboard/assistant-stats')
       ])
 
+      const totalRevenue = analytics?.revenue?.total ?? 0
+      const averageOrderValue = analytics?.revenue?.avgOrderValue ?? 0
+      const totalOrders = analytics?.revenue?.totalOrders ?? 0
+      const totalCustomers = (typeof analytics?.customers === 'object'
+        ? analytics?.customers?.total
+        : analytics?.customers) ?? 0
+
       setMetrics({
-        totalRevenue: dashboardMetrics.totalRevenue || 0,
-        totalOrders: dashboardMetrics.totalOrders || 0,
-        totalCustomers: dashboardMetrics.totalCustomers || 0,
-        averageOrderValue: dashboardMetrics.averageOrderValue || 0,
-        recentOrders: dashboardMetrics.recentOrders || [],
-        topProducts: dashboardMetrics.topProducts || [],
+        totalRevenue,
+        totalOrders,
+        totalCustomers,
+        averageOrderValue,
+        recentOrders: analytics?.recentOrders || [],
+        topProducts: analytics?.topProducts || [],
         performanceMetrics: performance,
-        assistantStats: assistantStats
+        assistantStats
       })
     } catch (err) {
       console.error('Failed to load dashboard:', err)
@@ -49,6 +55,18 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Helpers to safely read nested metrics and avoid rendering objects
+  const getAvgLatency = () => metrics?.performanceMetrics?.api?.avgResponseTime ?? 0
+  const getRequestsPerMinute = () => metrics?.performanceMetrics?.api?.requestsPerMinute ?? 0
+  const getActiveSSE = () => metrics?.performanceMetrics?.sse?.activeConnections ?? 0
+  const getFunctionCallsCount = () => {
+    const fc = metrics?.assistantStats?.functionCalls
+    if (!fc) return 0
+    if (Array.isArray(fc)) return fc.length
+    if (typeof fc === 'object') return Object.values(fc).reduce((sum: number, v: any) => sum + (typeof v === 'number' ? v : 0), 0)
+    return Number(fc) || 0
   }
 
   if (loading) {
@@ -85,25 +103,25 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard
           title="Total Revenue"
-          value={`$${metrics?.totalRevenue.toLocaleString() || '0'}`}
+          value={`$${(metrics?.totalRevenue ?? 0).toLocaleString()}`}
           icon="💰"
           color="bg-green-500"
         />
         <MetricCard
           title="Total Orders"
-          value={metrics?.totalOrders || '0'}
+          value={`${metrics?.totalOrders ?? 0}`}
           icon="📦"
           color="bg-blue-500"
         />
         <MetricCard
           title="Total Customers"
-          value={metrics?.totalCustomers || '0'}
+          value={`${metrics?.totalCustomers ?? 0}`}
           icon="👥"
           color="bg-purple-500"
         />
         <MetricCard
           title="Avg Order Value"
-          value={`$${metrics?.averageOrderValue.toFixed(2) || '0'}`}
+          value={`$${(metrics?.averageOrderValue ?? 0).toFixed(2)}`}
           icon="📊"
           color="bg-orange-500"
         />
@@ -170,16 +188,16 @@ export default function AdminDashboard() {
         <h2 className="text-xl font-semibold mb-4">Top Products</h2>
         <div className="space-y-3">
           {metrics?.topProducts?.slice(0, 5).map((product: any, index: number) => (
-            <div key={product._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div key={`${product._id || product.name || index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-3">
                 <span className="text-lg font-semibold text-gray-600">#{index + 1}</span>
                 <div>
                   <p className="font-medium text-gray-900">{product.name}</p>
-                  <p className="text-sm text-gray-500">Sold: {product.soldCount} units</p>
+                  <p className="text-sm text-gray-500">Sold: {product.soldCount ?? product.quantitySold ?? 0} units</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-semibold text-gray-900">${product.revenue.toFixed(2)}</p>
+                <p className="font-semibold text-gray-900">${(product.revenue ?? 0).toFixed(2)}</p>
                 <p className="text-sm text-gray-500">Revenue</p>
               </div>
             </div>
@@ -195,15 +213,15 @@ export default function AdminDashboard() {
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-gray-600">Average Latency</span>
-              <span className="font-semibold">{metrics?.performanceMetrics?.averageLatency || 0}ms</span>
+              <span className="font-semibold">{getAvgLatency()}ms</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Total Requests</span>
-              <span className="font-semibold">{metrics?.performanceMetrics?.totalRequests || 0}</span>
+              <span className="text-gray-600">Requests / Min</span>
+              <span className="font-semibold">{getRequestsPerMinute()}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Active SSE Connections</span>
-              <span className="font-semibold">{metrics?.performanceMetrics?.activeSSEConnections || 0}</span>
+              <span className="font-semibold">{getActiveSSE()}</span>
             </div>
           </div>
         </div>
@@ -222,7 +240,7 @@ export default function AdminDashboard() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Function Calls</span>
-              <span className="font-semibold">{metrics?.assistantStats?.functionCalls || 0}</span>
+              <span className="font-semibold">{getFunctionCallsCount()}</span>
             </div>
           </div>
         </div>
@@ -233,12 +251,13 @@ export default function AdminDashboard() {
 
 // Metric Card Component
 function MetricCard({ title, value, icon, color }: any) {
+  const safeValue = typeof value === 'object' ? (value?.toString?.() || JSON.stringify(value)) : value
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-gray-600 text-sm font-medium">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{safeValue}</p>
         </div>
         <div className={`${color} rounded-full p-3 text-white text-2xl`}>
           {icon}

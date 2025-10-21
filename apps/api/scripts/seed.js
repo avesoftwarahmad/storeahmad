@@ -334,7 +334,17 @@ async function seedDatabase() {
     await client.connect();
     console.log('✅ Connected to MongoDB');
     
-    const db = client.db();
+    // Use the same DB name selection as the API layer
+    const uriPathDb = (() => {
+      try {
+        const match = uri.match(/mongodb(?:\+srv)?:\/\/[^/]+\/([^?]+)/i);
+        return match && match[1] ? decodeURIComponent(match[1]) : null;
+      } catch (_) {
+        return null;
+      }
+    })();
+    const dbName = process.env.MONGODB_DB_NAME || uriPathDb || 'shopmart';
+    const db = client.db(dbName);
     
     // Clear existing data
     console.log('🗑️  Clearing existing data...');
@@ -361,11 +371,40 @@ async function seedDatabase() {
     
     // Insert products
     console.log('📦 Inserting products...');
-    const productDocs = products.map(p => ({
-      ...p,
-      createdAt: new Date(),
-      updatedAt: new Date()
+    const mapWithImage = (p) => {
+      const slug = (p.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const image = p.imageUrl && !p.imageUrl.includes('placeholder.com')
+        ? p.imageUrl
+        : `https://picsum.photos/seed/${slug || Math.random().toString(36).slice(2)}/600/600`;
+      return {
+        ...p,
+        imageUrl: image,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    };
+
+    const baseProducts = products.map(mapWithImage);
+
+    // Add extra products to reach at least 30
+    const extraNames = [
+      'Noise Cancelling Earbuds',
+      'Ergonomic Office Chair',
+      'Stainless Steel Cookware Set',
+      'Cycling Helmet Pro',
+      'Kindle-Style E-Reader'
+    ];
+    const extraProducts = extraNames.map((name, idx) => mapWithImage({
+      name,
+      description: name + ' with premium build quality',
+      price: [59.99, 199.99, 129.99, 89.99, 139.99][idx] || 49.99,
+      category: ['electronics', 'home', 'home', 'sports', 'electronics'][idx] || 'accessories',
+      tags: [],
+      imageUrl: '',
+      stock: Math.floor(Math.random() * 90) + 10
     }));
+
+    const productDocs = [...baseProducts, ...extraProducts];
     const productResult = await db.collection('products').insertMany(productDocs);
     console.log(`✅ Inserted ${productResult.insertedCount} products`);
     
@@ -539,5 +578,10 @@ async function seedDatabase() {
   }
 }
 
-// Run seed
-seedDatabase();
+// Export for reuse and allow direct execution
+module.exports = seedDatabase;
+
+if (require.main === module) {
+  // Run seed when executed directly from CLI
+  seedDatabase();
+}

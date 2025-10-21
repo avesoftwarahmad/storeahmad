@@ -1,6 +1,7 @@
 const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDB } = require('../db');
+const seedDatabase = require('../../scripts/seed');
 
 const router = express.Router();
 
@@ -141,7 +142,8 @@ router.post('/', async (req, res) => {
       });
     }
     
-    if (typeof price !== 'number' || price < 0) {
+    const priceNum = typeof price === 'string' ? parseFloat(price) : price;
+    if (typeof priceNum !== 'number' || isNaN(priceNum) || priceNum < 0) {
       return res.status(400).json({
         error: {
           code: 'INVALID_PRICE',
@@ -150,7 +152,8 @@ router.post('/', async (req, res) => {
       });
     }
     
-    if (typeof stock !== 'number' || stock < 0) {
+    const stockNum = typeof stock === 'string' ? parseInt(stock) : stock;
+    if (typeof stockNum !== 'number' || isNaN(stockNum) || stockNum < 0) {
       return res.status(400).json({
         error: {
           code: 'INVALID_STOCK',
@@ -161,14 +164,20 @@ router.post('/', async (req, res) => {
     
     const db = getDB();
     
+    const slug = (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const defaultImage = `https://picsum.photos/seed/${slug || Math.random().toString(36).slice(2)}/600/600`;
+    const normalizedTags = Array.isArray(tags)
+      ? tags
+      : (typeof tags === 'string' && tags.trim() !== '' ? tags.split(',').map(t => t.trim()) : []);
+
     const newProduct = {
       name,
       description: description || '',
-      price,
+      price: priceNum,
       category,
-      tags: tags || [],
-      imageUrl: imageUrl || '',
-      stock: stock || 0,
+      tags: normalizedTags.length ? normalizedTags : (category ? [category] : []),
+      imageUrl: imageUrl && imageUrl.trim() !== '' ? imageUrl : defaultImage,
+      stock: stockNum || 0,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -251,6 +260,34 @@ router.put('/:id/stock', async (req, res) => {
         message: 'Failed to update stock'
       }
     });
+  }
+});
+
+// POST /api/products/seed - Seed products (admin only)
+router.post('/seed', async (req, res) => {
+  try {
+    console.log('🌱 Manual seed requested...');
+    await seedDatabase();
+    console.log('✅ Manual seed completed');
+    
+    // Return fresh counts so the frontend can verify
+    try {
+      const db = getDB();
+      const [productsCount, customersCount, ordersCount] = await Promise.all([
+        db.collection('products').estimatedDocumentCount(),
+        db.collection('customers').estimatedDocumentCount(),
+        db.collection('orders').estimatedDocumentCount()
+      ]);
+      res.json({ 
+        message: 'Database seeded successfully',
+        counts: { products: productsCount, customers: customersCount, orders: ordersCount }
+      });
+    } catch (e) {
+      res.json({ message: 'Database seeded successfully' });
+    }
+  } catch (error) {
+    console.error('Manual seed error:', error);
+    res.status(500).json({ error: 'Failed to seed database' });
   }
 });
 

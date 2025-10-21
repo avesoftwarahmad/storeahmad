@@ -6,7 +6,7 @@ import { formatCurrency } from '../lib/format'
 import type { Product } from '../types'
 import ProductCard from '../components/molecules/ProductCard'
 
-export default function ProductPage() {
+function ProductPage() {
   const { id } = useParams<{ id: string }>()
   const [product, setProduct] = useState<Product | null>(null)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
@@ -166,3 +166,5 @@ export default function ProductPage() {
     </div>
   )
 }
+
+export default ProductPage

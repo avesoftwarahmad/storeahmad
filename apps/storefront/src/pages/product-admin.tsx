@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { formatCurrency } from '../lib/format'
 
-const API_BASE_URL = 'http://localhost:3001/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin
 
 interface Product {
   _id?: string
@@ -21,7 +21,7 @@ interface Stats {
 
 export default function ProductAdmin() {
   const [products, setProducts] = useState<Product[]>([])
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -40,7 +40,7 @@ export default function ProductAdmin() {
 
   const loadProducts = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/products`)
+      const response = await fetch(`${API_BASE_URL}/api/products`)
       const data = await response.json()
       setProducts(data.products || data)
     } catch (error) {
@@ -52,9 +52,27 @@ export default function ProductAdmin() {
 
   const loadStats = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/stats`)
+      // Use analytics dashboard-metrics and remap to local shape
+      const response = await fetch(`${API_BASE_URL}/api/analytics/dashboard-metrics`)
+      if (!response.ok) throw new Error('Failed to fetch metrics')
       const data = await response.json()
-      setStats(data)
+      const mapped = {
+        products: {
+          total: data?.products?.total ?? 0,
+          lowStock: 0,
+          byCategory: data?.orderStatusBreakdown ? {} : {}
+        },
+        customers: {
+          total: data?.customers ?? 0,
+          newThisWeek: data?.orders?.thisWeek ?? 0
+        },
+        orders: {
+          total: data?.revenue?.totalOrders ?? 0,
+          byStatus: data?.orderStatusBreakdown ?? {},
+          revenue: data?.revenue?.total ?? 0
+        }
+      }
+      setStats(mapped)
     } catch (error) {
       console.error('Failed to load stats:', error)
     }
@@ -64,8 +82,8 @@ export default function ProductAdmin() {
     e.preventDefault()
     
     const url = editingProduct 
-      ? `${API_BASE_URL}/products/${editingProduct._id}`
-      : `${API_BASE_URL}/products`
+      ? `${API_BASE_URL}/api/products/${editingProduct._id}`
+      : `${API_BASE_URL}/api/products`
     
     const method = editingProduct ? 'PUT' : 'POST'
     
@@ -97,7 +115,7 @@ export default function ProductAdmin() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this product?')) {
       try {
-        const response = await fetch(`${API_BASE_URL}/products/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/products/${id}`, {
           method: 'DELETE'
         })
         if (response.ok) {
@@ -117,20 +135,22 @@ export default function ProductAdmin() {
   }
 
   const handleResetData = async () => {
-    if (confirm('⚠️ This will reset ALL data to defaults. Are you sure?')) {
+    if (confirm('⚠️ سيؤدي هذا إلى مسح البيانات وإعادة تعبئتها بـ 30+ منتج تجريبي. هل أنت متأكد؟')) {
       try {
-        const response = await fetch(`${API_BASE_URL}/admin/reset`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ confirm: 'RESET_ALL_DATA' })
+        const response = await fetch(`${API_BASE_URL}/api/products/seed`, {
+          method: 'POST'
         })
         if (response.ok) {
-          loadProducts()
-          loadStats()
-          alert('✅ Data reset to defaults')
+          await loadProducts()
+          await loadStats()
+          alert('✅ تمت إعادة التهيئة: تم إدراج 30+ منتج مع صور، وطلبات/عملاء افتراضيين')
+        } else {
+          const text = await response.text().catch(() => '')
+          alert('فشل التهيئة: ' + text)
         }
       } catch (error) {
         console.error('Failed to reset data:', error)
+        alert('فشل التهيئة. تحقق من السجل.')
       }
     }
   }
@@ -185,15 +205,15 @@ export default function ProductAdmin() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total:</span>
-                <span className="font-bold">{stats.products.total}</span>
+                <span className="font-bold">{Number(stats?.products?.total ?? 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Low Stock:</span>
-                <span className="font-bold text-red-600">{stats.products.lowStock}</span>
+                <span className="font-bold text-red-600">{Number(stats?.products?.lowStock ?? 0)}</span>
               </div>
               <div className="pt-2 border-t">
                 <div className="text-sm text-gray-500">By Category:</div>
-                {Object.entries(stats.products.byCategory).map(([cat, count]) => (
+                {stats?.products?.byCategory && Object.entries(stats.products.byCategory).map(([cat, count]) => (
                   <div key={cat} className="flex justify-between text-sm">
                     <span className="capitalize">{cat}:</span>
                     <span>{count as number}</span>
@@ -208,11 +228,11 @@ export default function ProductAdmin() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total:</span>
-                <span className="font-bold">{stats.customers.total}</span>
+                <span className="font-bold">{Number(stats?.customers?.total ?? 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">New This Week:</span>
-                <span className="font-bold text-green-600">{stats.customers.newThisWeek}</span>
+                <span className="font-bold text-green-600">{Number(stats?.customers?.newThisWeek ?? 0)}</span>
               </div>
             </div>
           </div>
@@ -222,17 +242,17 @@ export default function ProductAdmin() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total:</span>
-                <span className="font-bold">{stats.orders.total}</span>
+                <span className="font-bold">{Number(stats?.orders?.total ?? 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Revenue:</span>
                 <span className="font-bold text-green-600">{formatCurrency(stats.orders.revenue)}</span>
               </div>
-              {Object.entries(stats.orders.byStatus || {}).length > 0 && (
+              {stats.orders && Object.entries(stats.orders.byStatus || {}).length > 0 && (
                 <div className="pt-2 border-t">
                   <div className="text-sm text-gray-500">By Status:</div>
                   {Object.entries(stats.orders.byStatus).map(([status, count]) => (
-                    <div key={status} className="flex justify-between text-sm">
+                    <div key={`${status}`} className="flex justify-between text-sm">
                       <span>{status}:</span>
                       <span>{count as number}</span>
                     </div>
@@ -271,8 +291,12 @@ export default function ProductAdmin() {
                 <input
                   type="number"
                   step="0.01"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                  value={Number.isFinite(formData.price) ? formData.price : 0}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    const num = raw === '' ? 0 : parseFloat(raw)
+                    setFormData({ ...formData, price: Number.isFinite(num) ? num : 0 })
+                  }}
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -300,8 +324,12 @@ export default function ProductAdmin() {
                 </label>
                 <input
                   type="number"
-                  value={formData.stock}
-                  onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) })}
+                  value={Number.isFinite(formData.stock) ? formData.stock : 0}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    const num = raw === '' ? 0 : parseInt(raw, 10)
+                    setFormData({ ...formData, stock: Number.isFinite(num) ? num : 0 })
+                  }}
                   className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -364,7 +392,7 @@ export default function ProductAdmin() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {products.map((product) => (
-              <tr key={product._id}>
+              <tr key={product._id || product.name}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div>
                     <div className="text-sm font-medium text-gray-900">{product.name}</div>

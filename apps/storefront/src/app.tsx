@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import CatalogPage from './pages/catalog'
-import ProductPage from './pages/product'
+// Product page removed - products can be viewed in catalog
+// import ProductPage from './pages/product'
 // Auth not required for Week 5
 // import AuthPage from './pages/auth'
 // import { AuthProvider } from './lib/auth'
@@ -21,7 +22,7 @@ function App() {
             <div className="flex items-center justify-between h-16">
               {/* Logo */}
               <Link to="/" className="flex items-center">
-                <span className="text-2xl font-bold text-primary-600">ShopSmart</span>
+                <span className="text-2xl font-bold text-primary-600">ahmad store</span>
               </Link>
 
               {/* Navigation */}
@@ -65,7 +66,7 @@ function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/catalog" element={<CatalogPage />} />
-            <Route path="/p/:id" element={<ProductPage />} />
+            {/* Product page removed - products can be viewed in catalog */}
             <Route path="/cart" element={<CartPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/order/:id" element={<OrderStatusPage />} />

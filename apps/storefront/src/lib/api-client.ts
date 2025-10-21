@@ -1,6 +1,6 @@
 // API Client for Backend Communication
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin
 
 class ApiClient {
   private baseUrl: string
@@ -192,7 +192,7 @@ export function createOrderSSE(orderId: string) {
       eventSource.addEventListener('message', (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data.type === 'status') {
+          if (data.type === 'status' || data.type === 'status_update') {
             callback(data)
           }
         } catch (error) {
@@ -205,7 +205,7 @@ export function createOrderSSE(orderId: string) {
       eventSource.addEventListener('message', (event) => {
         try {
           const data = JSON.parse(event.data)
-          if (data.type === 'complete') {
+          if (data.type === 'complete' || data.type === 'completed') {
             callback(data)
             eventSource.close()
           }

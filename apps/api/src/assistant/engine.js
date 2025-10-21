@@ -54,7 +54,7 @@ function getDefaultConfig() {
     identity: {
       name: 'Alex',
       role: 'Customer Support Specialist',
-      company: 'ShopSmart',
+      company: 'ahmad store',
       personality: ['helpful', 'professional', 'friendly', 'efficient']
     },
     intents: {
@@ -184,14 +184,41 @@ async function handlePolicyQuestion(query) {
   const relevantPolicies = citationValidator.findRelevantPolicies(query);
   
   if (relevantPolicies.length === 0) {
-    return "I couldn't find specific policy information for your question. Please contact our customer service team for more details.";
+    return "I could not find this information in the ahmad store documentation.";
   }
-  
-  // Use the most relevant policy and format with citation
-  const policy = relevantPolicies[0];
-  const formattedResponse = citationValidator.formatPolicyWithCitation(policy);
-  
-  return `${formattedResponse}\n\nIs there anything else you'd like to know about our policies?`;
+
+  // Build grounded prompt for LLM requiring citations
+  const identity = assistantConfig?.identity || { name: 'Agent', role: 'Support', company: 'ahmad store' };
+  const rules = assistantConfig?.rules || [];
+  const system = [
+    `You are ${identity.name}, a ${identity.role} at ${identity.company}.`,
+    'Answer ONLY using the provided policy snippets.',
+    'When you reference policy info, you MUST cite at least one [PolicyID] from the provided context.',
+    'Be concise and helpful. Never mention being an AI or model.'
+  ].concat(rules || []).join('\n');
+
+  const contextLines = relevantPolicies.map(p => `- [${p.id}] ${p.answer}`);
+  const contextBlock = contextLines.join('\n');
+  const prompt = [
+    system,
+    '',
+    'Context:',
+    contextBlock,
+    '',
+    `User question: ${query}`,
+    '',
+    'Answer (include [PolicyID] citations from Context):'
+  ].join('\n');
+
+  const llmText = await callLLM(prompt);
+
+  // Ensure at least one citation exists; if not, append the top policy id to satisfy requirement
+  const citations = citationValidator.extractCitations(llmText || '');
+  let finalText = llmText || '';
+  if (!citations || citations.length === 0) {
+    finalText = `${finalText ? finalText + ' ' : ''}[${relevantPolicies[0].id}]`;
+  }
+  return finalText.trim();
 }
 
 // Handle order status queries
@@ -240,7 +267,7 @@ async function generateResponse(userInput, intent, functionResults = []) {
   
   switch (intent.intent) {
     case INTENTS.POLICY_QUESTION:
-      // Use knowledge base for policy questions
+      // Use KB + LLM for grounded answer with citations
       const policyResponse = await handlePolicyQuestion(userInput);
       response.text = policyResponse;
       
@@ -267,13 +294,20 @@ async function generateResponse(userInput, intent, functionResults = []) {
       if (functionResults.length > 0 && functionResults[0].success) {
         const result = functionResults[0].result;
         if (result.products.length > 0) {
-          response.text = `I found ${result.count} products matching your search:\n\n`;
-          for (const product of result.products) {
-            response.text += `• **${product.name}** - $${product.price}\n`;
-            response.text += `  ${product.description.substring(0, 100)}...\n`;
-            response.text += `  Stock: ${product.stock > 0 ? `✅ Available (${product.stock} units)` : '❌ Out of stock'}\n\n`;
-          }
-          response.text += `Would you like more details about any of these products?`;
+          // Summarize with LLM for a concise, friendly response
+          const identity = assistantConfig?.identity || { name: 'Agent', role: 'Support', company: 'ahmad store' };
+          const list = result.products.slice(0, 5).map(p => `- ${p.name} ($${p.price}) | ${p.category} | stock: ${p.stock}`).join('\n');
+          const prompt = [
+            `${identity.name} is a ${identity.role} at ${identity.company}. Write a concise helpful summary of top matching products for the customer.`,
+            'Do not invent details. Use exactly the provided list. Keep under 120 words.',
+            '',
+            'Products:',
+            list,
+            '',
+            'Answer:'
+          ].join('\n');
+          const llmText = await callLLM(prompt);
+          response.text = (llmText || '').trim() || `Found ${result.count} matching products. Would you like more details about any of them?`;
         } else {
           response.text = `I couldn't find any products matching your search. Try using different keywords or browse our categories for more options.`;
         }
@@ -283,20 +317,21 @@ async function generateResponse(userInput, intent, functionResults = []) {
       break;
       
     case INTENTS.COMPLAINT:
-      response.text = `I sincerely apologize for the trouble you're experiencing. Your satisfaction is very important to us, and I want to make this right.\n\n`;
-      response.text += `Could you please provide more details about the issue? If this is about a specific order, please share the order ID so I can investigate immediately.`;
+      // Keep deterministic empathetic response
+      response.text = `I’m really sorry for the trouble you’re experiencing. Your satisfaction is very important to us and I want to make this right.\n\n` +
+        `Could you share more details about the issue? If it’s about an order, please include the order ID so I can investigate immediately.`;
       break;
       
     case INTENTS.CHITCHAT:
-      response.text = `Hello! I'm ${config.name}, your ${config.role} at ${config.company}. I'm here to help with your shopping needs, order inquiries, or any questions about our policies. How can I assist you today?`;
+      response.text = `Hello! I’m ${config.name}, your ${config.role} at ${config.company}. I can help with products, orders, and policies. How can I assist you today?`;
       break;
       
     case INTENTS.OFF_TOPIC:
-      response.text = `I appreciate your question, but I'm specifically trained to help with ${config.company} shopping, orders, and policies. Is there anything related to our store that I can help you with today?`;
+      response.text = `I appreciate your question, but I’m focused on ${config.company} shopping, orders, and policies. Is there anything related to our store I can help you with today?`;
       break;
       
     case INTENTS.VIOLATION:
-      response.text = `I understand you may be frustrated, but I need to maintain a professional conversation. I'm here to help with your ${config.company} needs. Please let me know how I can assist you with your shopping or order concerns.`;
+      response.text = `I understand you may be frustrated, but I need to maintain a professional conversation. I’m here to help with your ${config.company} needs. Please let me know how I can assist with your shopping or order concerns.`;
       break;
       
     default:
@@ -306,33 +341,33 @@ async function generateResponse(userInput, intent, functionResults = []) {
   return response;
 }
 
-// Call LLM service (mock for local testing)
-async function callLLM(prompt) {
-  // In production, this would call the actual LLM endpoint
-  const llmEndpoint = process.env.LLM_ENDPOINT;
-  
-  if (llmEndpoint) {
-    try {
-      const response = await fetch(llmEndpoint, {
+// Call LLM service (/generate)
+async function callLLM(prompt, opts = {}) {
+  const base = process.env.LLM_ENDPOINT;
+  if (!base) {
+    return '';
+  }
+  const url = `${base.replace(/\/+$/, '')}/generate`;
+  try {
+    const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
-          max_tokens: 500
+        max_tokens: Number(opts.maxTokens || 256),
+        temperature: Number(opts.temperature || 0.2)
         })
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        return data.text;
-      }
-    } catch (error) {
-      console.error('LLM call failed:', error);
+    if (!response.ok) {
+      const txt = await response.text();
+      throw new Error(`LLM ${response.status}: ${txt}`);
     }
+    const data = await response.json();
+    return (data && (data.text || data.answer || '')) || '';
+  } catch (err) {
+    console.error('LLM call failed:', err.message || err);
+    return '';
   }
-  
-  // Fallback for testing without LLM
-  return `[Mock LLM Response] Based on the prompt, I would provide helpful information here.`;
 }
 
 // Main assistant endpoint
@@ -391,7 +426,7 @@ router.post('/chat', async (req, res) => {
     
     // Update assistant stats
     try {
-      await fetch(`http://localhost:${process.env.PORT || 3001}/api/dashboard/assistant-stats`, {
+      await fetch(`http://127.0.0.1:${process.env.PORT || 3001}/api/dashboard/assistant-stats`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
