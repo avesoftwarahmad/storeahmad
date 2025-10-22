@@ -38,28 +38,34 @@ export async function answerQuestion(question: string): Promise<{
   const questionTokens = tokenize(q)
   let bestMatch: { qid: string; score: number; answer: string } | null = null
 
+  // Filter out common stop words that don't add semantic meaning
+  const stopWords = new Set(['how', 'do', 'i', 'you', 'we', 'they', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'will', 'would', 'could', 'should', 'can', 'may', 'might', 'must', 'shall'])
+  
+  const meaningfulQuestionTokens = questionTokens.filter(token => !stopWords.has(token))
+  
   for (const item of groundTruth as GroundTruthItem[]) {
     const itemTokens = tokenize(item.question)
-    const overlap = itemTokens.filter(token => questionTokens.includes(token)).length
+    const meaningfulItemTokens = itemTokens.filter(token => !stopWords.has(token))
     
-    // Use a more robust scoring: overlap / max(questionTokens.length, itemTokens.length)
-    // This prevents short questions from getting artificially high scores
-    const maxLength = Math.max(questionTokens.length, itemTokens.length)
-    const score = maxLength > 0 ? overlap / maxLength : 0
+    // Only consider meaningful tokens for scoring
+    const overlap = meaningfulItemTokens.filter(token => meaningfulQuestionTokens.includes(token)).length
+    
+    // Require at least 2 meaningful words to overlap for a match
+    if (overlap < 2) {
+      continue
+    }
+    
+    // Use Jaccard similarity: overlap / union
+    const union = new Set([...meaningfulQuestionTokens, ...meaningfulItemTokens]).size
+    const score = union > 0 ? overlap / union : 0
     
     if (!bestMatch || score > bestMatch.score) {
       bestMatch = { qid: item.qid, score, answer: item.answer }
     }
   }
 
-  // Debug logging for troubleshooting
-  if (q === 'How do I cook pasta?') {
-    console.log('Question tokens:', questionTokens)
-    console.log('Best match:', bestMatch)
-  }
-
-  // Check confidence threshold - increased to 0.4 for better precision
-  if (!bestMatch || bestMatch.score < 0.4) {
+  // Check confidence threshold - require high confidence for matches
+  if (!bestMatch || bestMatch.score < 0.5) {
     return { refused: true }
   }
 
