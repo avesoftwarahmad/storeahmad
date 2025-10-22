@@ -41,15 +41,25 @@ export async function answerQuestion(question: string): Promise<{
   for (const item of groundTruth as GroundTruthItem[]) {
     const itemTokens = tokenize(item.question)
     const overlap = itemTokens.filter(token => questionTokens.includes(token)).length
-    const score = itemTokens.length > 0 ? overlap / itemTokens.length : 0
+    
+    // Use a more robust scoring: overlap / max(questionTokens.length, itemTokens.length)
+    // This prevents short questions from getting artificially high scores
+    const maxLength = Math.max(questionTokens.length, itemTokens.length)
+    const score = maxLength > 0 ? overlap / maxLength : 0
     
     if (!bestMatch || score > bestMatch.score) {
       bestMatch = { qid: item.qid, score, answer: item.answer }
     }
   }
 
-  // Check confidence threshold
-  if (!bestMatch || bestMatch.score < 0.25) {
+  // Debug logging for troubleshooting
+  if (q === 'How do I cook pasta?') {
+    console.log('Question tokens:', questionTokens)
+    console.log('Best match:', bestMatch)
+  }
+
+  // Check confidence threshold - increased to 0.4 for better precision
+  if (!bestMatch || bestMatch.score < 0.4) {
     return { refused: true }
   }
 
