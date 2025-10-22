@@ -126,5 +126,34 @@ export const api = {
       console.error('Failed to fetch dashboard metrics:', error)
       return null
     }
+  },
+
+  // Assistant endpoints
+  sendAssistantMessage: async (message: string, context: any = {}) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/assistant/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message, context }),
+      })
+      if (!response.ok) throw new Error('Failed to send message')
+      return await response.json()
+    } catch (error) {
+      console.error('Failed to send assistant message:', error)
+      throw error
+    }
+  },
+
+  getAssistantInfo: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/assistant/info`)
+      if (!response.ok) throw new Error('Failed to fetch assistant info')
+      return await response.json()
+    } catch (error) {
+      console.error('Failed to fetch assistant info:', error)
+      throw error
+    }
   }
 }
