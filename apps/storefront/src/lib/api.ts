@@ -1,6 +1,6 @@
 import type { Product, OrderStatus } from '../types'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3003'
 
 export async function listProducts(): Promise<Product[]> {
   try {

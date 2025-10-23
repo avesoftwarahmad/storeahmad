@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "install:api": "cd apps/api && npm install",
-    "install:frontend": "cd apps/storefront && npm install", 
+    "install:frontend": "cd apps/storefront && npm install",
     "install:all": "npm run install:api && npm run install:frontend",
     "dev:api": "cd apps/api && npm run dev",
     "dev:frontend": "cd apps/storefront && npm run dev",
@@ -26,5 +26,9 @@
   ],
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
   }
 }
