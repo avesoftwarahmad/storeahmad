@@ -184,7 +184,9 @@ async function handlePolicyQuestion(query) {
   const relevantPolicies = citationValidator.findRelevantPolicies(query);
   
   if (relevantPolicies.length === 0) {
-    return "I could not find this information in the ahmad store documentation.";
+    // Enhanced fallback for policy questions when no specific policies found
+    const identity = assistantConfig?.identity || { name: 'Agent', role: 'Support', company: 'ahmad store' };
+    return `I'd be happy to help you with ${identity.company} policies! While I don't have specific information about that topic, I can help you with our return policy, shipping information, payment methods, or order tracking. What would you like to know about?`;
   }
 
   // Build grounded prompt for LLM requiring citations
@@ -211,6 +213,13 @@ async function handlePolicyQuestion(query) {
   ].join('\n');
 
   const llmText = await callLLM(prompt);
+
+  // If LLM is not available, use enhanced fallback with policy information
+  if (!llmText) {
+    const policy = relevantPolicies[0];
+    const fallbackResponse = `Based on our ${policy.category} policy: ${policy.answer} [${policy.id}]`;
+    return fallbackResponse;
+  }
 
   // Ensure at least one citation exists; if not, append the top policy id to satisfy requirement
   const citations = citationValidator.extractCitations(llmText || '');
@@ -307,7 +316,13 @@ async function generateResponse(userInput, intent, functionResults = []) {
             'Answer:'
           ].join('\n');
           const llmText = await callLLM(prompt);
-          response.text = (llmText || '').trim() || `Found ${result.count} matching products. Would you like more details about any of them?`;
+          if (llmText) {
+            response.text = llmText.trim();
+          } else {
+            // Enhanced fallback when LLM is not available
+            const productList = result.products.slice(0, 3).map(p => `• ${p.name} - $${p.price} (${p.category})`).join('\n');
+            response.text = `I found ${result.count} products that match your search:\n\n${productList}\n\nWould you like more details about any of these items?`;
+          }
         } else {
           response.text = `I couldn't find any products matching your search. Try using different keywords or browse our categories for more options.`;
         }
@@ -341,7 +356,9 @@ async function generateResponse(userInput, intent, functionResults = []) {
       break;
       
     default:
-      response.text = `I'm here to help! You can ask me about products, check your order status, or learn about our policies. What would you like to know?`;
+      // Enhanced fallback for unrecognized intents
+      const identity = assistantConfig?.identity || { name: 'Agent', role: 'Support', company: 'ahmad store' };
+      response.text = `Hello! I'm ${identity.name}, your ${identity.role} at ${identity.company}. I'm here to help you with:\n\n• Product information and search\n• Order status and tracking\n• Store policies (returns, shipping, payments)\n• General shopping assistance\n\nWhat can I help you with today?`;
   }
   
   return response;
