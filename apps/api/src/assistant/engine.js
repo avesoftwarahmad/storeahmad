@@ -344,12 +344,6 @@ async function generateResponse(userInput, intent, functionResults = []) {
       response.text = `I'm here to help! You can ask me about products, check your order status, or learn about our policies. What would you like to know?`;
   }
   
-  
-    // If LLM is not available, use enhanced fallback
-    if (!response.text && !base) {
-      response.text = getEnhancedFallbackResponse(intent.intent, userInput);
-    }
-  
   return response;
 }
 
