@@ -20,6 +20,7 @@ const analyticsRouter = require('./routes/analytics');
 const dashboardRouter = require('./routes/dashboard');
 const orderSSE = require('./sse/order-status');
 const { assistantRouter } = require('./assistant/engine');
+const testRouter = require('./routes/test');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -92,7 +93,29 @@ async function buildFrontendIfNeeded() {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow same-origin requests (unified deployment)
+    if (origin === `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` || 
+        origin === `http://${process.env.RENDER_EXTERNAL_HOSTNAME}`) {
+      return callback(null, true);
+    }
+    
+    // Allow configured CORS origins
+    const allowedOrigins = process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'];
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Allow localhost for development
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -134,6 +157,7 @@ app.use('/api/orders', ordersRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/assistant', assistantRouter);
+app.use('/api/test', testRouter);
 
 // SSE endpoint for order tracking
 app.get('/api/orders/:id/stream', orderSSE.streamOrderStatus);
