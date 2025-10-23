@@ -2,6 +2,7 @@ const express = require('express');
 const yaml = require('js-yaml');
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 const { classifyIntent, INTENTS } = require('./intent-classifier');
 const functionRegistry = require('./function-registry');
 const citationValidator = require('./citation-validator');
@@ -378,8 +379,8 @@ async function callLLM(prompt, opts = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt,
-        max_tokens: Number(opts.maxTokens || 256),
-        temperature: Number(opts.temperature || 0.2)
+          max_tokens: Number(opts.maxTokens || 256),
+          temperature: Number(opts.temperature || 0.2)
         })
       });
     if (!response.ok) {
