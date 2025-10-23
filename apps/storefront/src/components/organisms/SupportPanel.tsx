@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { answerQuestion } from '../../assistant/engine'
 import { useFocusTrap } from '../../lib/useFocusTrap'
 
 export default function SupportPanel() {
@@ -15,13 +14,31 @@ export default function SupportPanel() {
 
     setIsLoading(true)
     try {
-      const result = await answerQuestion(question)
-      if (result.refused) {
-        setResponse('I can only help with order status and general store policies. Please contact support@storefront.com for other inquiries.')
+      // Call the LLM-based assistant API
+      const response = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: question,
+          context: {}
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.error) {
+        setResponse(`Sorry, I encountered an error: ${data.error.message}. Please try again or contact support@storefront.com`)
       } else {
-        setResponse(result.answer || 'No response available')
+        setResponse(data.response || 'No response available')
       }
     } catch (error) {
+      console.error('Assistant API error:', error)
       setResponse('Sorry, I encountered an error. Please try again or contact support@storefront.com')
     } finally {
       setIsLoading(false)

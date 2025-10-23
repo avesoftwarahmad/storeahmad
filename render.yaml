@@ -21,4 +21,4 @@ services:
       - key: AUTO_SEED
         value: "true"
       - key: LLM_ENDPOINT
-        value: "https://your-ngrok-url.ngrok-free.app"
+        sync: false
