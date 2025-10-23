@@ -39,11 +39,39 @@ npm run dev    # Development with nodemon
 - `PORT` - Server port (default: 3001)
 - `NODE_ENV` - Environment (development/production)
 - `CORS_ORIGINS` - Allowed origins (comma-separated)
-- `LLM_ENDPOINT` - Optional LLM service URL
+- `LLM_ENDPOINT` - Optional LLM service base URL (e.g. https://<ngrok>.ngrok-free.app)
 
 ## API Documentation
 
 See main README for endpoint documentation.
+
+## Ngrok + Local LLM (Optional)
+
+You can run a lightweight local LLM and connect it to this backend without code changes. The assistant will use `POST ${LLM_ENDPOINT}/generate` automatically when `LLM_ENDPOINT` is set.
+
+Quick start:
+
+```bash
+# From repo root
+python3 setup-llm-deployment.py
+
+# Copy the printed ngrok URL, then set:
+export LLM_ENDPOINT=https://<your-ngrok>.ngrok-free.app
+
+# Or add it to apps/api/.env and restart the server
+```
+
+Manual alternative:
+
+```bash
+python3 llm_deployment_optimized.py
+```
+
+This starts a FastAPI server on port 8000 and exposes endpoints:
+- `POST /generate` (used by the assistant)
+- `POST /chat` (RAG demo)
+
+Arabic note: ملاحظة: كل شيء شغال؛ فقط أدخل/فعّل ngrok وسيعمل كل شيء تلقائياً. محلياً يوجد LLM صغير للتجربة.
 
 ## Database Schema
 

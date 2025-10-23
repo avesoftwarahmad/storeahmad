@@ -260,6 +260,43 @@ def generate():
     return jsonify({"text": response})
 ```
 
+### Ngrok + Local LLM (Auto-setup)
+
+Quickly expose a lightweight local LLM and connect it to the assistant.
+
+1) One-command setup (starts FastAPI on port 8000 + opens ngrok):
+
+```bash
+python3 setup-llm-deployment.py
+```
+
+This will print a public URL like: `https://<id>.ngrok-free.app`
+
+2) Point the backend assistant to it by setting `LLM_ENDPOINT`:
+
+```bash
+# Locally (temporary for current shell)
+export LLM_ENDPOINT=https://<your-ngrok>.ngrok-free.app
+
+# Or in apps/api/.env
+# LLM_ENDPOINT=https://<your-ngrok>.ngrok-free.app
+
+# Or on Render (recommended):
+# Set LLM_ENDPOINT to the ngrok URL in your Render service env vars and redeploy
+```
+
+The assistant will automatically call `POST {LLM_ENDPOINT}/generate` — no code changes needed.
+
+Alternative (manual):
+
+```bash
+python3 llm_deployment_optimized.py
+```
+
+Follow the prompt to enter your ngrok token; endpoints will be available at `/generate` and `/chat`.
+
+Note (Arabic): ملاحظة: كل شيء شغال؛ فقط فعّل ngrok وسيعمل كل شيء تلقائياً. محلياً يوجد LLM صغير للتجربة.
+
 ## 📝 Environment Variables
 See `.env.example`:
 ```
