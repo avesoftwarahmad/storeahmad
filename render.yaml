@@ -22,3 +22,5 @@ services:
         value: "true"
       - key: LLM_ENDPOINT
         sync: false
+      - key: PORT
+        value: "3001"
