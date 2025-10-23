@@ -20,3 +20,5 @@ services:
         value: "https://shopmart-unified.onrender.com,http://localhost:5173"
       - key: AUTO_SEED
         value: "true"
+      - key: LLM_ENDPOINT
+        value: "https://your-ngrok-url.ngrok-free.app"
