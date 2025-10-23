@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { answerQuestion } from '../../assistant/engine'
+import { api } from '../../lib/api'
 import { useFocusTrap } from '../../lib/useFocusTrap'
 
 export default function SupportPanel() {
@@ -15,13 +15,10 @@ export default function SupportPanel() {
 
     setIsLoading(true)
     try {
-      const result = await answerQuestion(question)
-      if (result.refused) {
-        setResponse('I can only help with order status and general store policies. Please contact support@storefront.com for other inquiries.')
-      } else {
-        setResponse(result.answer || 'No response available')
-      }
+      const result = await api.sendAssistantMessage(question)
+      setResponse(result.response || 'No response available')
     } catch (error) {
+      console.error('Assistant error:', error)
       setResponse('Sorry, I encountered an error. Please try again or contact support@storefront.com')
     } finally {
       setIsLoading(false)

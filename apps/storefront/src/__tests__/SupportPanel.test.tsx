@@ -1,11 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SupportPanel from '../components/organisms/SupportPanel'
-import { answerQuestion } from '../assistant/engine'
+import { api } from '../lib/api'
 
-// Mock the engine module
-vi.mock('../assistant/engine')
-const mockAnswerQuestion = vi.mocked(answerQuestion)
+// Mock the API module
+vi.mock('../lib/api')
+const mockApi = vi.mocked(api)
 
 describe('SupportPanel', () => {
   beforeEach(() => {
@@ -44,10 +44,10 @@ describe('SupportPanel', () => {
   })
 
   it('submits question and displays response', async () => {
-    mockAnswerQuestion.mockResolvedValue({
-      answer: 'Test answer',
-      qid: 'Q01',
-      refused: false
+    mockApi.sendAssistantMessage.mockResolvedValue({
+      response: 'Test answer',
+      intent: 'chitchat',
+      confidence: 0.8
     })
 
     render(<SupportPanel />)
@@ -65,15 +65,13 @@ describe('SupportPanel', () => {
     fireEvent.click(sendButton)
     
     await waitFor(() => {
-      expect(mockAnswerQuestion).toHaveBeenCalledWith('Test question')
+      expect(mockApi.sendAssistantMessage).toHaveBeenCalledWith('Test question')
       expect(screen.getByText('Test answer')).toBeInTheDocument()
     })
   })
 
-  it('handles refused responses', async () => {
-    mockAnswerQuestion.mockResolvedValue({
-      refused: true
-    })
+  it('handles API errors', async () => {
+    mockApi.sendAssistantMessage.mockRejectedValue(new Error('API Error'))
 
     render(<SupportPanel />)
     
@@ -83,20 +81,20 @@ describe('SupportPanel', () => {
     
     // Enter question
     const textarea = screen.getByPlaceholderText('Ask a question or enter your order ID...')
-    fireEvent.change(textarea, { target: { value: 'Out of scope question' } })
+    fireEvent.change(textarea, { target: { value: 'Test question' } })
     
     // Submit
     const sendButton = screen.getByText('Send')
     fireEvent.click(sendButton)
     
     await waitFor(() => {
-      expect(screen.getByText(/I can only help with order status and general store policies/)).toBeInTheDocument()
+      expect(screen.getByText(/Sorry, I encountered an error/)).toBeInTheDocument()
     })
   })
 
   it('shows loading state during submission', async () => {
-    mockAnswerQuestion.mockImplementation(() => new Promise(resolve => 
-      setTimeout(() => resolve({ answer: 'Test', refused: false }), 100)
+    mockApi.sendAssistantMessage.mockImplementation(() => new Promise(resolve => 
+      setTimeout(() => resolve({ response: 'Test answer' }), 100)
     ))
 
     render(<SupportPanel />)
